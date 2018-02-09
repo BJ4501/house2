@@ -55,6 +55,30 @@ public class UserController {
         return RestResponse.success();
     }
 
+    //----登录、鉴权----
 
+    //登录
+    @RequestMapping("auth")
+    public RestResponse<User> auth(@RequestBody User user){
+        User finalUser = userService.auth(user.getEmail(),user.getPasswd());
+        return RestResponse.success(finalUser);
+    }
+
+    /**
+     * 鉴权操作
+     * @param token JWT Token
+     * @return
+     */
+    @RequestMapping("get")
+    public RestResponse<User> getUser(String token){
+        User finalUser = userService.getLoginUserByToken(token);
+        return RestResponse.success(finalUser);
+    }
+
+    @RequestMapping("logout")
+    public RestResponse<Object> logout(String token){
+        userService.invalidate(token);
+        return RestResponse.success();
+    }
 
 }

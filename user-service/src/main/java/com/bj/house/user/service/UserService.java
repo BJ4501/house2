@@ -6,7 +6,9 @@ import com.bj.house.user.mapper.UserMapper;
 import com.bj.house.user.model.User;
 import com.bj.house.user.utils.BeanHelper;
 import com.bj.house.user.utils.HashUtils;
+import com.bj.house.user.utils.JwtHelper;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,7 +16,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -118,4 +122,89 @@ public class UserService {
         return true;
     }
 
+    /**
+     * 校验用户名密码，生成Token并返回用户对象
+     * @param email
+     * @param passwd
+     * @return
+     */
+    public User auth(String email, String passwd) {
+        if (StringUtils.isBlank(email) || StringUtils.isBlank(passwd)){
+            System.out.println();
+            throw new UserException(UserException.Type.USER_AUTH_FAIL,"User Auth Fail.");
+        }
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswd(HashUtils.encryPassword(passwd));
+        user.setEnable(1); //只去查询激活的用户
+        List<User> list = getUserByQuery(user);
+        if (!list.isEmpty()){
+            User rtnUser = list.get(0);
+            onLogin(rtnUser);
+            return rtnUser;
+        }
+        throw new UserException(UserException.Type.USER_AUTH_FAIL,"User Auth Fail.");
+
+    }
+
+    //自由调整Token失效时间,使用Redis控制Token时间，因JWT失效时间固定
+    private String renewToken(String token, String email){
+        redisTemplate.opsForValue().set(email, token);
+        redisTemplate.expire(email,30,TimeUnit.MINUTES);
+        return token;
+    }
+
+    //JWT 生成Token 设置token
+    private void onLogin(User user) {
+        //不可输入密码等敏感信息,明文
+        String token = JwtHelper.getToken(ImmutableMap.of(
+                "email", user.getEmail(),
+                "name", user.getName(),
+                "ts", Instant.now().getEpochSecond() + ""));
+
+        renewToken(token, user.getEmail());
+
+        user.setToken(token);
+    }
+
+    public User getLoginUserByToken(String token) {
+        Map<String,String> map = null;
+
+        try {
+            map = JwtHelper.verifyToken(token);
+        } catch (Exception e) {
+            throw new UserException(UserException.Type.USER_NOT_LOGIN, "User not Login.");
+        }
+        //获取Email
+        String email = map.get("email");
+        //查看该token还有多少剩余时间
+        Long expire = redisTemplate.getExpire(email);
+        if (expire > 0){
+            //如果token还生效，自动续约
+            renewToken(token,email);
+            User user = getUserByEmail(email);
+            //需要再次将Token传回去
+            user.setToken(token);
+            return user;
+        }
+
+        throw new UserException(UserException.Type.USER_NOT_LOGIN, "User not Login.");
+    }
+
+    //通过Email获取用户信息
+    private User getUserByEmail(String email) {
+        User user = new User();
+        user.setEmail(email);
+        List<User> list = getUserByQuery(user);
+        if (!list.isEmpty()){
+            return list.get(0);
+        }
+        throw new UserException(UserException.Type.USER_NOT_FOUND, "User not found for : " + email);
+    }
+
+    //将Token失效
+    public void invalidate(String token) {
+        Map<String,String> map = JwtHelper.verifyToken(token);
+        redisTemplate.delete(map.get("email"));
+    }
 }

@@ -1,6 +1,7 @@
 package com.bj.house.user.common;
 
 import com.bj.house.user.exception.IllegalParamsException;
+import com.bj.house.user.exception.UserException;
 import com.bj.house.user.exception.WithTypeException;
 import com.google.common.collect.ImmutableMap;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -14,6 +15,7 @@ public class Exception2CodeRepo {
     //存储异常及状态Map
     private static final ImmutableMap<Object, RestCode> MAP = ImmutableMap.<Object, RestCode>builder()
             .put(IllegalParamsException.Type.WRONG_PAGE_NUM,RestCode.WRONG_PAGE) //页码信息错误
+            .put(UserException.Type.USER_NOT_LOGIN,RestCode.TOKEN_INVALID) //用户未登录
             .put(IllegalStateException.class,RestCode.UNKNOWN_ERROR) //其他错误
             .build();
 
